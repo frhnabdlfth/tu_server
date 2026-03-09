@@ -1,0 +1,45 @@
+import { NextRequest, NextResponse } from "next/server"
+import fs from "node:fs/promises"
+import path from "node:path"
+
+const SMB_HOST = "100.119.133.84"
+
+function safeJoinSharePath(share: string, subpath: string) {
+  const cleanedShare = share.replace(/[\\/]+/g, "").trim()
+  const cleanedSubpath = subpath
+    .replace(/\.\./g, "")
+    .replace(/^[/\\]+/, "")
+    .trim()
+
+  const rootPath = `\\\\${SMB_HOST}\\${cleanedShare}`
+  const fullPath = cleanedSubpath ? path.join(rootPath, cleanedSubpath) : rootPath
+
+  return { fullPath }
+}
+
+export async function GET(request: NextRequest) {
+  try {
+    const share = request.nextUrl.searchParams.get("share")
+    const filePath = request.nextUrl.searchParams.get("path")
+
+    if (!share || !filePath) {
+      return NextResponse.json(
+        { error: "Parameter share dan path wajib diisi" },
+        { status: 400 }
+      )
+    }
+
+    const { fullPath } = safeJoinSharePath(share, filePath)
+    const fileBuffer = await fs.readFile(fullPath)
+
+    return new NextResponse(fileBuffer, {
+      headers: {
+        "Content-Type": "application/octet-stream",
+        "Content-Disposition": `attachment; filename="${path.basename(fullPath)}"`,
+      },
+    })
+  } catch (error) {
+    console.error(error)
+    return NextResponse.json({ error: "Gagal download file" }, { status: 500 })
+  }
+}
