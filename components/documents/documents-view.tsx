@@ -1,6 +1,7 @@
-"use client"
+"use client";
 
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Globe, Copy } from "lucide-react";
 import {
   FileText,
   Folder,
@@ -20,18 +21,19 @@ import {
   FolderPlus,
   CheckSquare,
   Square,
-} from "lucide-react"
+  Upload,
+} from "lucide-react";
 import {
   Card,
   CardContent,
   CardHeader,
   CardTitle,
   CardDescription,
-} from "@/components/ui/card"
-import { Input } from "@/components/ui/input"
-import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
-import { Textarea } from "@/components/ui/textarea"
+} from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Dialog,
   DialogContent,
@@ -39,7 +41,7 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog"
+} from "@/components/ui/dialog";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -49,211 +51,226 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-} from "@/components/ui/alert-dialog"
+} from "@/components/ui/alert-dialog";
 
 type ShareItem = {
-  name: string
-  remark?: string
-}
+  name: string;
+  remark?: string;
+};
 
 type SharedDocumentItem = {
-  name: string
-  path: string
-  absolutePath: string
-  type: "file" | "folder"
-  size?: number
-  extension?: string
-  modifiedAt?: string
-}
+  name: string;
+  path: string;
+  absolutePath: string;
+  type: "file" | "folder";
+  size?: number;
+  extension?: string;
+  modifiedAt?: string;
+};
 
 type SharesResponse = {
-  host: string
-  shares: ShareItem[]
-}
+  host: string;
+  shares: ShareItem[];
+};
 
 type SharedDocumentsResponse = {
-  host: string
-  share: string
-  rootPath: string
-  currentPath: string
-  items: SharedDocumentItem[]
-}
+  host: string;
+  share: string;
+  rootPath: string;
+  currentPath: string;
+  items: SharedDocumentItem[];
+};
 
 function formatBytes(bytes?: number) {
-  if (!bytes || bytes <= 0) return "-"
-  const units = ["B", "KB", "MB", "GB", "TB"]
-  let value = bytes
-  let unitIndex = 0
+  if (!bytes || bytes <= 0) return "-";
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  let value = bytes;
+  let unitIndex = 0;
 
   while (value >= 1024 && unitIndex < units.length - 1) {
-    value /= 1024
-    unitIndex++
+    value /= 1024;
+    unitIndex++;
   }
 
-  return `${value.toFixed(value >= 10 ? 0 : 1)} ${units[unitIndex]}`
+  return `${value.toFixed(value >= 10 ? 0 : 1)} ${units[unitIndex]}`;
 }
 
 function getFileIcon(item: SharedDocumentItem) {
-  if (item.type === "folder") return Folder
+  if (item.type === "folder") return Folder;
 
-  const ext = item.extension?.toLowerCase()
+  const ext = item.extension?.toLowerCase();
 
-  if (["xlsx", "xls", "csv"].includes(ext || "")) return FileSpreadsheet
-  if (["png", "jpg", "jpeg", "webp", "svg"].includes(ext || "")) return FileImage
-  if (["zip", "rar", "7z"].includes(ext || "")) return FileArchive
+  if (["xlsx", "xls", "csv"].includes(ext || "")) return FileSpreadsheet;
+  if (["png", "jpg", "jpeg", "webp", "svg"].includes(ext || ""))
+    return FileImage;
+  if (["zip", "rar", "7z"].includes(ext || "")) return FileArchive;
 
-  return FileText
+  return FileText;
 }
 
 function isTextFile(extension?: string) {
   return ["txt", "md", "json", "csv", "log"].includes(
-    (extension || "").toLowerCase()
-  )
+    (extension || "").toLowerCase(),
+  );
 }
 
 export function DocumentsView() {
-  const [shares, setShares] = useState<ShareItem[]>([])
-  const [selectedShare, setSelectedShare] = useState("")
-  const [data, setData] = useState<SharedDocumentsResponse | null>(null)
-  const [loadingShares, setLoadingShares] = useState(true)
-  const [loadingDocuments, setLoadingDocuments] = useState(false)
-  const [query, setQuery] = useState("")
-  const [editingFile, setEditingFile] = useState<SharedDocumentItem | null>(null)
-  const [editorContent, setEditorContent] = useState("")
-  const [selectedItems, setSelectedItems] = useState<string[]>([])
+  const [shares, setShares] = useState<ShareItem[]>([]);
+  const [selectedShare, setSelectedShare] = useState("");
+  const [data, setData] = useState<SharedDocumentsResponse | null>(null);
+  const [loadingShares, setLoadingShares] = useState(true);
+  const [loadingDocuments, setLoadingDocuments] = useState(false);
+  const [query, setQuery] = useState("");
+  const [editingFile, setEditingFile] = useState<SharedDocumentItem | null>(
+    null,
+  );
+  const [editorContent, setEditorContent] = useState("");
+  const [selectedItems, setSelectedItems] = useState<string[]>([]);
 
-  const [createFolderOpen, setCreateFolderOpen] = useState(false)
-  const [newFolderName, setNewFolderName] = useState("")
+  const [createFolderOpen, setCreateFolderOpen] = useState(false);
+  const [newFolderName, setNewFolderName] = useState("");
 
-  const [deleteSingleOpen, setDeleteSingleOpen] = useState(false)
+  const [deleteSingleOpen, setDeleteSingleOpen] = useState(false);
   const [itemToDelete, setItemToDelete] = useState<SharedDocumentItem | null>(
-    null
-  )
+    null,
+  );
 
-  const [deleteSelectedOpen, setDeleteSelectedOpen] = useState(false)
+  const [deleteSelectedOpen, setDeleteSelectedOpen] = useState(false);
+
+  const [uploadOpen, setUploadOpen] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  const [publicShareOpen, setPublicShareOpen] = useState(false);
+  const [publicShareLoading, setPublicShareLoading] = useState(false);
+  const [publicShareUrl, setPublicShareUrl] = useState("");
+  const [publicShareTitle, setPublicShareTitle] = useState("");
 
   const fetchShares = async () => {
     try {
-      setLoadingShares(true)
-      const res = await fetch("/api/shares", { cache: "no-store" })
-      const json: SharesResponse = await res.json()
+      setLoadingShares(true);
+      const res = await fetch("/api/shares", { cache: "no-store" });
+      const json: SharesResponse = await res.json();
 
-      if (!res.ok) throw new Error("Failed to fetch shares")
-      setShares(json.shares)
+      if (!res.ok) throw new Error("Failed to fetch shares");
+      setShares(json.shares);
     } catch (error) {
-      console.error(error)
-      setShares([])
+      console.error(error);
+      setShares([]);
     } finally {
-      setLoadingShares(false)
+      setLoadingShares(false);
     }
-  }
+  };
 
   const fetchDocuments = async (share: string, subpath = "") => {
     try {
-      setLoadingDocuments(true)
+      setLoadingDocuments(true);
 
       const params = new URLSearchParams({
         share,
         path: subpath,
-      })
+      });
 
       const res = await fetch(`/api/documents?${params.toString()}`, {
         cache: "no-store",
-      })
+      });
 
-      const json: SharedDocumentsResponse = await res.json()
+      const json: SharedDocumentsResponse = await res.json();
 
-      if (!res.ok) throw new Error("Failed to fetch documents")
-      setData(json)
-      setSelectedItems([])
+      if (!res.ok) throw new Error("Failed to fetch documents");
+      setData(json);
+      setSelectedItems([]);
     } catch (error) {
-      console.error(error)
-      setData(null)
-      setSelectedItems([])
+      console.error(error);
+      setData(null);
+      setSelectedItems([]);
     } finally {
-      setLoadingDocuments(false)
+      setLoadingDocuments(false);
     }
-  }
+  };
 
   useEffect(() => {
-    fetchShares()
-  }, [])
+    fetchShares();
+  }, []);
 
   useEffect(() => {
     if (selectedShare) {
-      fetchDocuments(selectedShare, "")
+      fetchDocuments(selectedShare, "");
     } else {
-      setData(null)
-      setSelectedItems([])
+      setData(null);
+      setSelectedItems([]);
     }
-  }, [selectedShare])
+  }, [selectedShare]);
 
   const filteredItems = useMemo(() => {
-    const items = data?.items ?? []
-    const keyword = query.trim().toLowerCase()
+    const items = data?.items ?? [];
+    const keyword = query.trim().toLowerCase();
 
-    if (!keyword) return items
+    if (!keyword) return items;
 
     return items.filter((item) => {
       return (
         item.name.toLowerCase().includes(keyword) ||
         item.path.toLowerCase().includes(keyword) ||
         (item.extension || "").toLowerCase().includes(keyword)
-      )
-    })
-  }, [data, query])
+      );
+    });
+  }, [data, query]);
 
   const allFilteredSelected =
     filteredItems.length > 0 &&
-    filteredItems.every((item) => selectedItems.includes(item.absolutePath))
+    filteredItems.every((item) => selectedItems.includes(item.absolutePath));
 
   const toggleSelectItem = (absolutePath: string) => {
     setSelectedItems((prev) =>
       prev.includes(absolutePath)
         ? prev.filter((item) => item !== absolutePath)
-        : [...prev, absolutePath]
-    )
-  }
+        : [...prev, absolutePath],
+    );
+  };
 
   const toggleSelectAllFiltered = () => {
     if (allFilteredSelected) {
       setSelectedItems((prev) =>
         prev.filter(
           (selected) =>
-            !filteredItems.some((item) => item.absolutePath === selected)
-        )
-      )
-      return
+            !filteredItems.some((item) => item.absolutePath === selected),
+        ),
+      );
+      return;
     }
 
-    const filteredPaths = filteredItems.map((item) => item.absolutePath)
+    const filteredPaths = filteredItems.map((item) => item.absolutePath);
 
-    setSelectedItems((prev) => Array.from(new Set([...prev, ...filteredPaths])))
-  }
+    setSelectedItems((prev) =>
+      Array.from(new Set([...prev, ...filteredPaths])),
+    );
+  };
 
   const goToFolder = (folderPath: string) => {
-    if (!selectedShare) return
-    fetchDocuments(selectedShare, folderPath)
-  }
+    if (!selectedShare) return;
+    fetchDocuments(selectedShare, folderPath);
+  };
 
   const goBack = () => {
-    if (!selectedShare || !data?.currentPath) return
+    if (!selectedShare || !data?.currentPath) return;
 
-    const parts = data.currentPath.split(/[\\/]/).filter(Boolean)
-    parts.pop()
-    const parentPath = parts.join("\\")
+    const parts = data.currentPath.split(/[\\/]/).filter(Boolean);
+    parts.pop();
+    const parentPath = parts.join("\\");
 
-    fetchDocuments(selectedShare, parentPath)
-  }
+    fetchDocuments(selectedShare, parentPath);
+  };
 
   const handleDownload = (item: SharedDocumentItem) => {
     window.open(
       `/api/documents/download?share=${encodeURIComponent(
-        selectedShare
+        selectedShare,
       )}&path=${encodeURIComponent(item.path)}`,
-      "_blank"
-    )
-  }
+      "_blank",
+    );
+  };
 
   const handleOpen = async (item: SharedDocumentItem) => {
     await fetch("/api/documents/open", {
@@ -263,28 +280,28 @@ export function DocumentsView() {
         share: selectedShare,
         path: item.path,
       }),
-    })
-  }
+    });
+  };
 
   const handleEdit = async (item: SharedDocumentItem) => {
     const res = await fetch(
       `/api/documents/edit?share=${encodeURIComponent(
-        selectedShare
-      )}&path=${encodeURIComponent(item.path)}`
-    )
-    const json = await res.json()
+        selectedShare,
+      )}&path=${encodeURIComponent(item.path)}`,
+    );
+    const json = await res.json();
 
     if (!res.ok) {
-      alert("Gagal membuka file untuk diedit")
-      return
+      alert("Gagal membuka file untuk diedit");
+      return;
     }
 
-    setEditingFile(item)
-    setEditorContent(json.content || "")
-  }
+    setEditingFile(item);
+    setEditorContent(json.content || "");
+  };
 
   const handleSaveEdit = async () => {
-    if (!editingFile) return
+    if (!editingFile) return;
 
     const res = await fetch("/api/documents/edit", {
       method: "PUT",
@@ -294,25 +311,25 @@ export function DocumentsView() {
         path: editingFile.path,
         content: editorContent,
       }),
-    })
+    });
 
     if (!res.ok) {
-      alert("Gagal menyimpan file")
-      return
+      alert("Gagal menyimpan file");
+      return;
     }
 
-    setEditingFile(null)
-    setEditorContent("")
-    fetchDocuments(selectedShare, data?.currentPath || "")
-  }
+    setEditingFile(null);
+    setEditorContent("");
+    fetchDocuments(selectedShare, data?.currentPath || "");
+  };
 
   const openDeleteSingleDialog = (item: SharedDocumentItem) => {
-    setItemToDelete(item)
-    setDeleteSingleOpen(true)
-  }
+    setItemToDelete(item);
+    setDeleteSingleOpen(true);
+  };
 
   const handleDelete = async () => {
-    if (!itemToDelete) return
+    if (!itemToDelete) return;
 
     const res = await fetch("/api/documents/delete", {
       method: "DELETE",
@@ -322,26 +339,26 @@ export function DocumentsView() {
         path: itemToDelete.path,
         type: itemToDelete.type,
       }),
-    })
+    });
 
     if (!res.ok) {
-      alert("Gagal menghapus item")
-      return
+      alert("Gagal menghapus item");
+      return;
     }
 
-    setDeleteSingleOpen(false)
-    setItemToDelete(null)
-    fetchDocuments(selectedShare, data?.currentPath || "")
-  }
+    setDeleteSingleOpen(false);
+    setItemToDelete(null);
+    fetchDocuments(selectedShare, data?.currentPath || "");
+  };
 
   const handleDeleteSelected = async () => {
     const itemsToDelete = filteredItems.filter((item) =>
-      selectedItems.includes(item.absolutePath)
-    )
+      selectedItems.includes(item.absolutePath),
+    );
 
     if (itemsToDelete.length === 0) {
-      alert("Belum ada item yang dipilih")
-      return
+      alert("Belum ada item yang dipilih");
+      return;
     }
 
     const results = await Promise.all(
@@ -354,28 +371,28 @@ export function DocumentsView() {
             path: item.path,
             type: item.type,
           }),
-        })
-      )
-    )
+        }),
+      ),
+    );
 
-    const hasFailed = results.some((res) => !res.ok)
+    const hasFailed = results.some((res) => !res.ok);
 
     if (hasFailed) {
-      alert("Sebagian item gagal dihapus")
+      alert("Sebagian item gagal dihapus");
     }
 
-    setDeleteSelectedOpen(false)
-    fetchDocuments(selectedShare, data?.currentPath || "")
-  }
+    setDeleteSelectedOpen(false);
+    fetchDocuments(selectedShare, data?.currentPath || "");
+  };
 
   const handleCreateFolder = async () => {
-    if (!selectedShare) return
+    if (!selectedShare) return;
 
-    const folderName = newFolderName.trim()
+    const folderName = newFolderName.trim();
 
     if (!folderName) {
-      alert("Nama folder wajib diisi")
-      return
+      alert("Nama folder wajib diisi");
+      return;
     }
 
     const res = await fetch("/api/documents/create-folder", {
@@ -386,18 +403,109 @@ export function DocumentsView() {
         currentPath: data?.currentPath || "",
         folderName,
       }),
-    })
+    });
 
     if (!res.ok) {
-      const json = await res.json().catch(() => null)
-      alert(json?.error || "Gagal membuat folder")
-      return
+      const json = await res.json().catch(() => null);
+      alert(json?.error || "Gagal membuat folder");
+      return;
     }
 
-    setCreateFolderOpen(false)
-    setNewFolderName("")
-    fetchDocuments(selectedShare, data?.currentPath || "")
-  }
+    setCreateFolderOpen(false);
+    setNewFolderName("");
+    fetchDocuments(selectedShare, data?.currentPath || "");
+  };
+
+  const handleUploadFile = async () => {
+    if (!selectedShare) return;
+
+    if (selectedFiles.length === 0) {
+      alert("Pilih file terlebih dahulu");
+      return;
+    }
+
+    try {
+      setUploading(true);
+
+      const formData = new FormData();
+      formData.append("share", selectedShare);
+      formData.append("currentPath", data?.currentPath || "");
+
+      selectedFiles.forEach((file) => {
+        formData.append("files", file);
+      });
+
+      const res = await fetch("/api/documents/upload", {
+        method: "POST",
+        body: formData,
+      });
+
+      const json = await res.json().catch(() => null);
+
+      if (!res.ok) {
+        alert(json?.error || "Gagal upload file");
+        return;
+      }
+
+      setUploadOpen(false);
+      setSelectedFiles([]);
+
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
+
+      fetchDocuments(selectedShare, data?.currentPath || "");
+    } catch (error) {
+      console.error(error);
+      alert("Terjadi kesalahan saat upload file");
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleCreatePublicShare = async () => {
+    if (!selectedShare) return;
+
+    try {
+      setPublicShareLoading(true);
+
+      const res = await fetch("/api/public-shares", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          share: selectedShare,
+          folderPath: data?.currentPath || "",
+          title:
+            publicShareTitle.trim() ||
+            `${selectedShare}${data?.currentPath ? ` - ${data.currentPath}` : ""}`,
+        }),
+      });
+
+      const json = await res.json();
+
+      if (!res.ok) {
+        alert(json?.error || "Gagal membuat public share");
+        return;
+      }
+
+      const baseUrl = window.location.origin;
+
+      setPublicShareUrl(`${baseUrl}/share/${json.slug}`);
+    } catch (error) {
+      console.error(error);
+      alert("Gagal membuat public share");
+    } finally {
+      setPublicShareLoading(false);
+    }
+  };
+
+  const handleCopyPublicLink = async () => {
+    if (!publicShareUrl) return;
+    await navigator.clipboard.writeText(publicShareUrl);
+    alert("Link public berhasil disalin");
+  };
 
   return (
     <div className="flex flex-1 flex-col gap-4">
@@ -441,11 +549,35 @@ export function DocumentsView() {
 
             <Button
               variant="outline"
+              onClick={() => setUploadOpen(true)}
+              disabled={!selectedShare}
+            >
+              <Upload className="mr-2 size-4" />
+              Upload File
+            </Button>
+
+            <Button
+              variant="outline"
               onClick={() => setCreateFolderOpen(true)}
               disabled={!selectedShare}
             >
               <FolderPlus className="mr-2 size-4" />
               Tambah Folder
+            </Button>
+
+            <Button
+              variant="outline"
+              onClick={() => {
+                setPublicShareTitle(
+                  `${selectedShare}${data?.currentPath ? ` - ${data.currentPath}` : ""}`,
+                );
+                setPublicShareUrl("");
+                setPublicShareOpen(true);
+              }}
+              disabled={!selectedShare}
+            >
+              <Globe className="mr-2 size-4" />
+              Izinkan Public
             </Button>
 
             <Button
@@ -501,8 +633,8 @@ export function DocumentsView() {
           {!loadingDocuments && filteredItems.length > 0 && (
             <div className="grid gap-3">
               {filteredItems.map((item) => {
-                const Icon = getFileIcon(item)
-                const isSelected = selectedItems.includes(item.absolutePath)
+                const Icon = getFileIcon(item);
+                const isSelected = selectedItems.includes(item.absolutePath);
 
                 return (
                   <div
@@ -600,7 +732,7 @@ export function DocumentsView() {
                       )}
                     </div>
                   </div>
-                )
+                );
               })}
             </div>
           )}
@@ -617,8 +749,8 @@ export function DocumentsView() {
                   <Button
                     variant="outline"
                     onClick={() => {
-                      setEditingFile(null)
-                      setEditorContent("")
+                      setEditingFile(null);
+                      setEditorContent("");
                     }}
                   >
                     <X className="mr-2 size-4" />
@@ -642,6 +774,61 @@ export function DocumentsView() {
         </CardContent>
       </Card>
 
+      <Dialog open={uploadOpen} onOpenChange={setUploadOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Upload File</DialogTitle>
+            <DialogDescription>
+              Upload file ke folder yang sedang dibuka.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Pilih File</label>
+            <Input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              onChange={(e) =>
+                setSelectedFiles(Array.from(e.target.files || []))
+              }
+            />
+            {selectedFiles.length > 0 && (
+              <div className="text-sm text-muted-foreground space-y-1">
+                <p>{selectedFiles.length} file dipilih:</p>
+                <ul className="list-disc pl-5">
+                  {selectedFiles.map((file) => (
+                    <li key={`${file.name}-${file.size}`}>{file.name}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setUploadOpen(false);
+                setSelectedFiles([]);
+                if (fileInputRef.current) {
+                  fileInputRef.current.value = "";
+                }
+              }}
+              disabled={uploading}
+            >
+              Batal
+            </Button>
+            <Button
+              onClick={handleUploadFile}
+              disabled={uploading || selectedFiles.length === 0}
+            >
+              {uploading ? "Mengupload..." : "Upload"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={createFolderOpen} onOpenChange={setCreateFolderOpen}>
         <DialogContent>
           <DialogHeader>
@@ -664,8 +851,8 @@ export function DocumentsView() {
             <Button
               variant="outline"
               onClick={() => {
-                setCreateFolderOpen(false)
-                setNewFolderName("")
+                setCreateFolderOpen(false);
+                setNewFolderName("");
               }}
             >
               Batal
@@ -689,8 +876,8 @@ export function DocumentsView() {
           <AlertDialogFooter>
             <AlertDialogCancel
               onClick={() => {
-                setDeleteSingleOpen(false)
-                setItemToDelete(null)
+                setDeleteSingleOpen(false);
+                setItemToDelete(null);
               }}
             >
               Batal
@@ -731,6 +918,69 @@ export function DocumentsView() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <Dialog open={publicShareOpen} onOpenChange={setPublicShareOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Izinkan Akses Public</DialogTitle>
+            <DialogDescription>
+              Folder yang sedang dibuka akan bisa diakses publik melalui link
+              khusus.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Judul Public Share</label>
+              <Input
+                value={publicShareTitle}
+                onChange={(e) => setPublicShareTitle(e.target.value)}
+                placeholder="Contoh: Dokumen Kelas 6A"
+              />
+            </div>
+
+            <div className="space-y-2 text-sm text-muted-foreground">
+              <div>Share: {selectedShare || "-"}</div>
+              <div>Folder: {data?.currentPath || "/"}</div>
+            </div>
+
+            {publicShareUrl && (
+              <div className="space-y-2 rounded-xl border p-3">
+                <div className="text-sm font-medium">Link Public</div>
+                <div className="break-all text-sm text-muted-foreground">
+                  {publicShareUrl}
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleCopyPublicLink}
+                >
+                  <Copy className="mr-2 size-4" />
+                  Copy Link
+                </Button>
+              </div>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setPublicShareOpen(false);
+                setPublicShareUrl("");
+              }}
+            >
+              Tutup
+            </Button>
+            <Button
+              onClick={handleCreatePublicShare}
+              disabled={publicShareLoading}
+            >
+              {publicShareLoading ? "Memproses..." : "Buat Link Public"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
-  )
+  );
 }
