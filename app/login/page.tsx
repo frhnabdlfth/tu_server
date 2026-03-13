@@ -41,7 +41,7 @@ export default function LoginPage() {
         return
       }
 
-      router.push("/dashboard")
+      router.push("/documents")
       router.refresh()
     } catch {
       setError("Terjadi kesalahan koneksi")

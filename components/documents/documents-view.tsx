@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Globe, Copy } from "lucide-react";
+import { toast } from "sonner";
 import {
   FileText,
   Folder,
@@ -22,6 +23,7 @@ import {
   CheckSquare,
   Square,
   Upload,
+  FolderInput,
 } from "lucide-react";
 import {
   Card,
@@ -146,6 +148,11 @@ export function DocumentsView() {
   const [publicShareLoading, setPublicShareLoading] = useState(false);
   const [publicShareUrl, setPublicShareUrl] = useState("");
   const [publicShareTitle, setPublicShareTitle] = useState("");
+
+  const [moveOpen, setMoveOpen] = useState(false);
+  const [itemToMove, setItemToMove] = useState<SharedDocumentItem | null>(null);
+  const [moveDestination, setMoveDestination] = useState("");
+  const [moving, setMoving] = useState(false);
 
   const fetchShares = async () => {
     try {
@@ -292,7 +299,7 @@ export function DocumentsView() {
     const json = await res.json();
 
     if (!res.ok) {
-      alert("Gagal membuka file untuk diedit");
+      toast.error("Gagal membuka file untuk diedit");
       return;
     }
 
@@ -314,7 +321,7 @@ export function DocumentsView() {
     });
 
     if (!res.ok) {
-      alert("Gagal menyimpan file");
+      toast.error("Gagal menyimpan file");
       return;
     }
 
@@ -342,7 +349,7 @@ export function DocumentsView() {
     });
 
     if (!res.ok) {
-      alert("Gagal menghapus item");
+      toast.error("Gagal menghapus item");
       return;
     }
 
@@ -357,7 +364,7 @@ export function DocumentsView() {
     );
 
     if (itemsToDelete.length === 0) {
-      alert("Belum ada item yang dipilih");
+      toast.error("Belum ada item yang dipilih");
       return;
     }
 
@@ -378,7 +385,7 @@ export function DocumentsView() {
     const hasFailed = results.some((res) => !res.ok);
 
     if (hasFailed) {
-      alert("Sebagian item gagal dihapus");
+      toast.error("Sebagian item gagal dihapus");
     }
 
     setDeleteSelectedOpen(false);
@@ -391,7 +398,7 @@ export function DocumentsView() {
     const folderName = newFolderName.trim();
 
     if (!folderName) {
-      alert("Nama folder wajib diisi");
+      toast.error("Nama folder wajib diisi");
       return;
     }
 
@@ -407,7 +414,7 @@ export function DocumentsView() {
 
     if (!res.ok) {
       const json = await res.json().catch(() => null);
-      alert(json?.error || "Gagal membuat folder");
+      toast.error(json?.error || "Gagal membuat folder");
       return;
     }
 
@@ -420,7 +427,7 @@ export function DocumentsView() {
     if (!selectedShare) return;
 
     if (selectedFiles.length === 0) {
-      alert("Pilih file terlebih dahulu");
+      toast.error("Pilih file terlebih dahulu");
       return;
     }
 
@@ -443,7 +450,7 @@ export function DocumentsView() {
       const json = await res.json().catch(() => null);
 
       if (!res.ok) {
-        alert(json?.error || "Gagal upload file");
+        toast.error(json?.error || "Gagal upload file");
         return;
       }
 
@@ -457,7 +464,7 @@ export function DocumentsView() {
       fetchDocuments(selectedShare, data?.currentPath || "");
     } catch (error) {
       console.error(error);
-      alert("Terjadi kesalahan saat upload file");
+      toast.error("Terjadi kesalahan saat upload file");
     } finally {
       setUploading(false);
     }
@@ -486,7 +493,7 @@ export function DocumentsView() {
       const json = await res.json();
 
       if (!res.ok) {
-        alert(json?.error || "Gagal membuat public share");
+        toast.error(json?.error || "Gagal membuat public share");
         return;
       }
 
@@ -495,7 +502,7 @@ export function DocumentsView() {
       setPublicShareUrl(`${baseUrl}/share/${json.slug}`);
     } catch (error) {
       console.error(error);
-      alert("Gagal membuat public share");
+      toast.error("Gagal membuat public share");
     } finally {
       setPublicShareLoading(false);
     }
@@ -504,7 +511,55 @@ export function DocumentsView() {
   const handleCopyPublicLink = async () => {
     if (!publicShareUrl) return;
     await navigator.clipboard.writeText(publicShareUrl);
-    alert("Link public berhasil disalin");
+    toast.error("Link public berhasil disalin");
+  };
+
+  const openMoveDialog = (item: SharedDocumentItem) => {
+    setItemToMove(item);
+    setMoveDestination("");
+    setMoveOpen(true);
+  };
+
+  const handleMove = async () => {
+    if (!selectedShare || !itemToMove) return;
+
+    const destinationPath = moveDestination.trim();
+
+    if (!destinationPath) {
+      toast.error("Path tujuan wajib diisi");
+      return;
+    }
+
+    try {
+      setMoving(true);
+
+      const res = await fetch("/api/documents/move", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          share: selectedShare,
+          sourcePath: itemToMove.path,
+          destinationPath,
+        }),
+      });
+
+      const json = await res.json().catch(() => null);
+
+      if (!res.ok) {
+        toast.error(json?.error || "Gagal memindahkan file");
+        return;
+      }
+
+      setMoveOpen(false);
+      setItemToMove(null);
+      setMoveDestination("");
+      fetchDocuments(selectedShare, data?.currentPath || "");
+    } catch (error) {
+      console.error(error);
+      toast.error("Terjadi kesalahan saat memindahkan file");
+    } finally {
+      setMoving(false);
+    }
   };
 
   return (

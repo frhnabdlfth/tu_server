@@ -17,7 +17,6 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
 const mainNavItems = [
-  { title: "Dashboard", icon: Home, href: "/dashboard" },
   { title: "Documents", icon: FileText, href: "/documents" },
 ];
 

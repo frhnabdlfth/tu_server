@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState, useEffect } from "react";
 import Link from "next/link";
 import {
   FileText,
@@ -24,6 +24,7 @@ import {
   FolderPlus,
   Loader2,
   Pencil,
+  FolderInput,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -48,6 +49,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { toast } from "sonner";
 
 type PublicFileItem = {
   id: string;
@@ -68,6 +70,12 @@ type PublicShareViewProps = {
   ownerName?: string;
   currentPath?: string;
   items: PublicFileItem[];
+};
+
+type FolderOption = {
+  path: string;
+  name: string;
+  depth: number;
 };
 
 function formatBytes(bytes?: number) {
@@ -94,6 +102,20 @@ function isVideoFile(extension?: string) {
   return ["mp4", "webm", "ogg", "mov", "m4v"].includes(
     (extension || "").toLowerCase(),
   );
+}
+
+function getFileIcon(item: PublicFileItem) {
+  if (item.type === "folder") return Folder;
+
+  const ext = item.extension?.toLowerCase();
+
+  if (["xlsx", "xls", "csv"].includes(ext || "")) return FileSpreadsheet;
+  if (["png", "jpg", "jpeg", "webp", "svg"].includes(ext || "")) {
+    return FileImage;
+  }
+  if (["zip", "rar", "7z"].includes(ext || "")) return FileArchive;
+
+  return FileText;
 }
 
 function FileThumbnail({ item }: { item: PublicFileItem }) {
@@ -139,19 +161,6 @@ function FileThumbnail({ item }: { item: PublicFileItem }) {
   );
 }
 
-function getFileIcon(item: PublicFileItem) {
-  if (item.type === "folder") return Folder;
-
-  const ext = item.extension?.toLowerCase();
-
-  if (["xlsx", "xls", "csv"].includes(ext || "")) return FileSpreadsheet;
-  if (["png", "jpg", "jpeg", "webp", "svg"].includes(ext || ""))
-    return FileImage;
-  if (["zip", "rar", "7z"].includes(ext || "")) return FileArchive;
-
-  return FileText;
-}
-
 export function PublicShareView({
   slug,
   title,
@@ -188,6 +197,12 @@ export function PublicShareView({
   const [renaming, setRenaming] = useState(false);
   const [renameItem, setRenameItem] = useState<PublicFileItem | null>(null);
 
+  const [moveOpen, setMoveOpen] = useState(false);
+  const [moveValue, setMoveValue] = useState("");
+  const [moving, setMoving] = useState(false);
+  const [availableFolders, setAvailableFolders] = useState<FolderOption[]>([]);
+  const [loadingFolders, setLoadingFolders] = useState(false);
+
   const filteredItems = useMemo(() => {
     const keyword = query.trim().toLowerCase();
     if (!keyword) return items;
@@ -199,6 +214,10 @@ export function PublicShareView({
       );
     });
   }, [items, query]);
+
+  const selectedTargets = useMemo(() => {
+    return items.filter((item) => selectedItems.includes(item.id));
+  }, [items, selectedItems]);
 
   const breadcrumbItems = useMemo(() => {
     const parts = currentPath.split(/[\\/]/).filter(Boolean);
@@ -272,8 +291,7 @@ export function PublicShareView({
         const relativePath =
           isFolderUpload &&
           (file as File & { webkitRelativePath?: string }).webkitRelativePath
-            ? (file as File & { webkitRelativePath?: string })
-                .webkitRelativePath!
+            ? (file as File & { webkitRelativePath?: string }).webkitRelativePath!
             : file.name;
 
         formData.append("relativePaths", relativePath);
@@ -332,7 +350,7 @@ export function PublicShareView({
   };
 
   const handleDeleteSelected = async () => {
-    const targets = filteredItems
+    const targets = items
       .filter((item) => selectedItems.includes(item.id))
       .map((item) => ({
         path: item.path || "",
@@ -340,7 +358,7 @@ export function PublicShareView({
       }));
 
     if (targets.length === 0) {
-      alert("Belum ada item yang dipilih");
+      toast.error("Belum ada item yang dipilih");
       return;
     }
 
@@ -358,7 +376,7 @@ export function PublicShareView({
     const json = await res.json().catch(() => null);
 
     if (!res.ok) {
-      alert(json?.error || "Gagal menghapus item");
+      toast.error(json?.error || "Gagal menghapus item");
       return;
     }
 
@@ -371,7 +389,7 @@ export function PublicShareView({
     const folderName = newFolderName.trim();
 
     if (!folderName) {
-      alert("Nama folder wajib diisi");
+      toast.error("Nama folder wajib diisi");
       return;
     }
 
@@ -392,7 +410,7 @@ export function PublicShareView({
       const json = await res.json().catch(() => null);
 
       if (!res.ok) {
-        alert(json?.error || "Gagal membuat folder");
+        toast.error(json?.error || "Gagal membuat folder");
         return;
       }
 
@@ -401,7 +419,7 @@ export function PublicShareView({
       window.location.reload();
     } catch (error) {
       console.error(error);
-      alert("Terjadi kesalahan saat membuat folder");
+      toast.error("Terjadi kesalahan saat membuat folder");
     } finally {
       setCreatingFolder(false);
     }
@@ -436,12 +454,12 @@ export function PublicShareView({
     const newName = renameValue.trim();
 
     if (!renameItem) {
-      alert("Item tidak ditemukan");
+      toast.error("Item tidak ditemukan");
       return;
     }
 
     if (!newName) {
-      alert("Nama baru wajib diisi");
+      toast.error("Nama baru wajib diisi");
       return;
     }
 
@@ -480,8 +498,7 @@ export function PublicShareView({
       const json = await res.json().catch(() => null);
 
       if (!res.ok) {
-        console.log("RENAME_ERROR_RESPONSE", json);
-        alert(json?.error || "Gagal rename item");
+        toast.error(json?.error || "Gagal rename item");
         return;
       }
 
@@ -491,9 +508,121 @@ export function PublicShareView({
       window.location.reload();
     } catch (error) {
       console.error(error);
-      alert("Terjadi kesalahan saat rename item");
+      toast.error("Terjadi kesalahan saat rename item");
     } finally {
       setRenaming(false);
+    }
+  };
+
+  const openMoveDialog = () => {
+    if (selectedTargets.length === 0) {
+      toast.error("Pilih item yang ingin dipindahkan terlebih dahulu");
+      return;
+    }
+
+    setMoveValue("");
+    setMoveOpen(true);
+  };
+
+  useEffect(() => {
+    if (moveOpen) {
+      fetchAvailableFolders();
+    } else {
+      setAvailableFolders([]);
+      setMoveValue("");
+    }
+  }, [moveOpen]);
+
+  const fetchAvailableFolders = async () => {
+    try {
+      setLoadingFolders(true);
+
+      const res = await fetch(`/api/public-shares/${slug}/folders`, {
+        cache: "no-store",
+      });
+
+      const json = await res.json().catch(() => null);
+
+      if (!res.ok) {
+        toast.error(json?.error || "Gagal memuat daftar folder");
+        return;
+      }
+
+      setAvailableFolders(json?.folders || []);
+    } catch (error) {
+      console.error(error);
+      toast.error("Terjadi kesalahan saat memuat daftar folder");
+    } finally {
+      setLoadingFolders(false);
+    }
+  };
+
+  const selectableFolders = useMemo(() => {
+    const selectedFolderPaths = selectedTargets
+      .filter((item) => item.type === "folder")
+      .map((item) =>
+        (item.path || item.name).replace(/\\/g, "/").replace(/^\/+/, ""),
+      );
+
+    return availableFolders.filter((folder) => {
+      const target = folder.path.replace(/\\/g, "/").replace(/^\/+/, "");
+
+      for (const folderPath of selectedFolderPaths) {
+        if (!target) continue;
+        if (target === folderPath) return false;
+        if (target.startsWith(`${folderPath}/`)) return false;
+      }
+
+      return true;
+    });
+  }, [availableFolders, selectedTargets]);
+
+  const handleMoveSelected = async () => {
+    if (selectedTargets.length === 0) {
+      toast.error("Belum ada item yang dipilih");
+      return;
+    }
+
+    try {
+      setMoving(true);
+
+      const payloadItems = selectedTargets.map((item) => ({
+        name: item.name,
+        type: item.type,
+        path:
+          item.path && item.path.trim()
+            ? item.path.replace(/\\/g, "/").replace(/^\/+/, "")
+            : item.name,
+      }));
+
+      const res = await fetch(`/api/public-shares/${slug}/move`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          destinationPath: moveValue.trim(),
+          items: payloadItems,
+        }),
+      });
+
+      const json = await res.json().catch(() => null);
+
+      if (!res.ok) {
+        toast.error(json?.error || "Gagal memindahkan item");
+        return;
+      }
+
+      setMoveOpen(false);
+      setMoveValue("");
+      setAvailableFolders([]);
+      setSelectedItems([]);
+      window.location.reload();
+    } catch (error) {
+      console.error(error);
+      toast.error("Terjadi kesalahan saat memindahkan item");
+    } finally {
+      setMoving(false);
     }
   };
 
@@ -522,10 +651,11 @@ export function PublicShareView({
               {ownerName && <Badge variant="secondary">By {ownerName}</Badge>}
               <Badge variant="outline">{items.length} items</Badge>
               <Badge variant="outline">Path: {currentPath || "/"}</Badge>
+              <Badge variant="outline">{selectedItems.length} dipilih</Badge>
             </div>
           </div>
 
-          <div className="flex flex-col gap-2 md:w-[480px]">
+          <div className="flex flex-col gap-2 md:w-[560px]">
             <div className="relative">
               <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
               <Input
@@ -582,6 +712,16 @@ export function PublicShareView({
               >
                 <FolderPlus className="mr-2 size-4" />
                 Tambah Folder
+              </Button>
+
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={openMoveDialog}
+                disabled={selectedItems.length === 0}
+              >
+                <FolderInput className="mr-2 size-4" />
+                Pindah
               </Button>
 
               <Button
@@ -710,7 +850,6 @@ export function PublicShareView({
         {viewMode === "grid" && filteredItems.length > 0 && (
           <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
             {filteredItems.map((item) => {
-              const Icon = getFileIcon(item);
               const isSelected = selectedItems.includes(item.id);
 
               return (
@@ -1135,6 +1274,117 @@ export function PublicShareView({
               </Button>
             )}
           </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={moveOpen} onOpenChange={setMoveOpen}>
+        <DialogContent className="sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Pindah Item Terpilih</DialogTitle>
+            <DialogDescription>
+              Pindahkan beberapa file/folder sekaligus ke folder tujuan.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="space-y-2 rounded-xl border p-3">
+              <div className="text-sm font-medium">
+                {selectedTargets.length} item dipilih
+              </div>
+              <div className="max-h-28 space-y-1 overflow-auto text-sm text-muted-foreground">
+                {selectedTargets.map((item) => (
+                  <div key={item.id}>
+                    • {item.name} ({item.type})
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Folder Tujuan</label>
+              <Input
+                value={moveValue}
+                onChange={(e) => setMoveValue(e.target.value)}
+                placeholder="Klik folder di bawah atau kosongkan untuk root"
+              />
+              <p className="text-xs text-muted-foreground">
+                Kosongkan untuk memindahkan ke root share/public share.
+              </p>
+            </div>
+
+            <div className="rounded-xl border">
+              <div className="flex items-center justify-between border-b px-3 py-2">
+                <div className="text-sm font-medium">Daftar Folder</div>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={fetchAvailableFolders}
+                  disabled={loadingFolders}
+                >
+                  {loadingFolders ? "Memuat..." : "Refresh"}
+                </Button>
+              </div>
+
+              <div className="max-h-80 overflow-auto p-2">
+                <button
+                  type="button"
+                  className={`flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm hover:bg-muted ${
+                    moveValue === "" ? "bg-muted" : ""
+                  }`}
+                  onClick={() => setMoveValue("")}
+                >
+                  <Folder className="size-4" />
+                  <span>/</span>
+                </button>
+
+                {loadingFolders && (
+                  <div className="px-3 py-4 text-sm text-muted-foreground">
+                    Memuat folder...
+                  </div>
+                )}
+
+                {!loadingFolders && selectableFolders.length === 0 && (
+                  <div className="px-3 py-4 text-sm text-muted-foreground">
+                    Tidak ada folder lain yang tersedia.
+                  </div>
+                )}
+
+                {!loadingFolders &&
+                  selectableFolders.map((folder) => (
+                    <button
+                      key={folder.path || "__root__"}
+                      type="button"
+                      className={`flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm hover:bg-muted ${
+                        moveValue === folder.path ? "bg-muted" : ""
+                      }`}
+                      onClick={() => setMoveValue(folder.path)}
+                      style={{ paddingLeft: `${12 + folder.depth * 20}px` }}
+                    >
+                      <Folder className="size-4 shrink-0" />
+                      <span className="truncate">{folder.path || "/"}</span>
+                    </button>
+                  ))}
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setMoveOpen(false);
+                setMoveValue("");
+                setAvailableFolders([]);
+              }}
+              disabled={moving}
+            >
+              Batal
+            </Button>
+            <Button onClick={handleMoveSelected} disabled={moving}>
+              {moving ? "Memindahkan..." : "Pindah"}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
