@@ -3,7 +3,7 @@ import { exec } from "node:child_process"
 import { promisify } from "node:util"
 
 const execAsync = promisify(exec)
-const SMB_HOST = "100.119.133.84"
+const SMB_HOST = process.env.SMB_HOST
 
 type ShareItem = {
   name: string

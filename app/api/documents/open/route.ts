@@ -4,7 +4,7 @@ import { promisify } from "node:util"
 import path from "node:path"
 
 const execAsync = promisify(exec)
-const SMB_HOST = "100.119.133.84"
+const SMB_HOST = process.env.SMB_HOST
 
 function safeJoinSharePath(share: string, subpath: string) {
   const cleanedShare = share.replace(/[\\/]+/g, "").trim()

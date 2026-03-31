@@ -7,7 +7,7 @@ import path from "node:path";
 export const runtime = "nodejs";
 
 const execAsync = promisify(exec);
-const SMB_HOST = "100.119.133.84";
+const SMB_HOST = process.env.SMB_HOST
 
 type MoveItem = {
   path: string;
@@ -45,26 +45,6 @@ function toPowerShellEncodedCommand(script: string) {
 }
 
 async function resolvePublicShare(slug: string) {
-  /**
-   * MODE 1:
-   * kalau slug memang nama share SMB, langsung pakai ini.
-   */
-  // return { share: slug, basePath: "" };
-
-  /**
-   * MODE 2:
-   * kalau slug adalah id public share, baca dari file JSON lokal.
-   * Simpan file di: /data/public-shares.json
-   *
-   * isi contoh:
-   * [
-   *   {
-   *     "slug": "33c96c0d3d53",
-   *     "share": "SharedFolder",
-   *     "basePath": ""
-   *   }
-   * ]
-   */
   try {
     const filePath = path.join(process.cwd(), "data", "public-shares.json");
     const raw = await fs.readFile(filePath, "utf8");

@@ -7,7 +7,7 @@ import path from "node:path";
 export const runtime = "nodejs";
 
 const execAsync = promisify(exec);
-const SMB_HOST = "100.119.133.84";
+const SMB_HOST = process.env.SMB_HOST
 
 type PublicShareRecord = {
   slug: string;

@@ -65,7 +65,7 @@ export default function LoginPage() {
               <Input
                 id="email"
                 type="email"
-                placeholder="admin@tu.local"
+                placeholder="Masukkan Email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
               />
@@ -92,9 +92,6 @@ export default function LoginPage() {
               {loading ? "Memproses..." : "Login"}
             </Button>
 
-            <div className="text-xs text-muted-foreground">
-              Demo login: admin@tu.local / admin123
-            </div>
           </form>
         </CardContent>
       </Card>
