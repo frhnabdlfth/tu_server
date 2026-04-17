@@ -18,6 +18,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
 const mainNavItems = [
   { title: "Documents", icon: FileText, href: "/documents" },
+  { title: "Student", icon: FileText, href: "/students" },
 ];
 
 const appName = "TU Server";
